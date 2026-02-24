@@ -130,6 +130,7 @@ export default class Alert {
       wrapperForType: (type) => `cdx-alert-${type}`,
       wrapperForAlignType: (alignType) => `cdx-alert-align-${alignType}`,
       message: 'cdx-alert__message',
+      meta: 'cdx-alert__meta',
     };
   }
 
@@ -150,6 +151,13 @@ export default class Alert {
     this.messagePlaceholder =
       config.messagePlaceholder || Alert.DEFAULT_MESSAGE_PLACEHOLDER;
 
+    this.showMeta = config.showMeta !== false;
+    this.getCurrentUserFullName =
+      typeof config.getCurrentUserFullName === 'function'
+        ? config.getCurrentUserFullName
+        : null;
+    this.dateLocale = typeof config.dateLocale === 'string' ? config.dateLocale : '';
+
     this.data = {
       type: this.alertTypes.includes(data.type)
         ? data.type
@@ -158,11 +166,93 @@ export default class Alert {
         ? data.align
         : this.defaultAlign,
       message: data.message || '',
+      authorFullName:
+        typeof data.authorFullName === 'string' ? data.authorFullName : '',
+      createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
     };
 
     this.container = undefined;
+    this.metaEl = undefined;
 
     this.readOnly = readOnly;
+
+    this._ensureMetaOnNewBlock(data);
+  }
+
+  /**
+   * Only auto-fill meta for a brand-new empty block.
+   * Existing blocks without meta are kept unchanged to avoid wrong attribution.
+   *
+   * @private
+   */
+  _ensureMetaOnNewBlock(initialData) {
+    if (!this.showMeta) return;
+
+    const hasMeta =
+      (typeof this.data.authorFullName === 'string' &&
+        this.data.authorFullName.trim().length > 0) ||
+      (typeof this.data.createdAt === 'string' &&
+        this.data.createdAt.trim().length > 0);
+
+    if (hasMeta) return;
+
+    const initialMessage =
+      initialData && typeof initialData.message === 'string'
+        ? initialData.message
+        : '';
+    const isEmptyNewBlock = !initialMessage || initialMessage.trim().length === 0;
+    if (!isEmptyNewBlock) return;
+
+    const author = this._resolveCurrentUserFullName();
+    if (author) this.data.authorFullName = author;
+    this.data.createdAt = new Date().toISOString();
+  }
+
+  /**
+   * @returns {string}
+   * @private
+   */
+  _resolveCurrentUserFullName() {
+    try {
+      if (this.getCurrentUserFullName) {
+        const v = this.getCurrentUserFullName();
+        if (typeof v === 'string') return v.trim();
+      }
+    } catch (_) {
+      // ignore
+    }
+    return '';
+  }
+
+  /**
+   * @returns {string}
+   * @private
+   */
+  _formatDate(iso) {
+    if (typeof iso !== 'string' || !iso.trim()) return '';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleDateString(this.dateLocale || undefined);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /**
+   * @returns {string}
+   * @private
+   */
+  _formatMetaText() {
+    if (!this.showMeta) return '';
+    const author =
+      typeof this.data.authorFullName === 'string'
+        ? this.data.authorFullName.trim()
+        : '';
+    const dateStr = this._formatDate(this.data.createdAt);
+    if (!author && !dateStr) return '';
+    if (author && dateStr) return `${author} · ${dateStr}`;
+    return author || dateStr;
   }
 
   /**
@@ -196,6 +286,16 @@ export default class Alert {
     messageEl.dataset.placeholder = this.messagePlaceholder;
 
     this.container.appendChild(messageEl);
+
+    if (this.showMeta) {
+      const metaText = this._formatMetaText();
+      this.metaEl = this._make('div', [this.CSS.meta], {
+        contentEditable: false,
+        innerText: metaText,
+      });
+      if (!metaText) this.metaEl.style.display = 'none';
+      this.container.appendChild(this.metaEl);
+    }
 
     return this.container;
   }
@@ -338,10 +438,23 @@ export default class Alert {
   onPaste(event) {
     const { data } = event.detail;
 
-    this.data = {
-      type: this.defaultType,
-      message: data.innerHTML || '',
-    };
+    this.data.type = this.defaultType;
+    this.data.align = this.defaultAlign;
+    this.data.message = data.innerHTML || '';
+
+    if (this.showMeta) {
+      if (!this.data.createdAt) this.data.createdAt = new Date().toISOString();
+      if (!this.data.authorFullName) {
+        const author = this._resolveCurrentUserFullName();
+        if (author) this.data.authorFullName = author;
+      }
+    }
+
+    if (this.metaEl) {
+      const metaText = this._formatMetaText();
+      this.metaEl.innerText = metaText;
+      this.metaEl.style.display = metaText ? '' : 'none';
+    }
   }
 
   /**
@@ -371,6 +484,9 @@ export default class Alert {
       message: true,
       type: false,
       alignType: false,
+      align: false,
+      authorFullName: false,
+      createdAt: false,
     };
   }
 }

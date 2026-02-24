@@ -54,6 +54,18 @@ $alert-themes:
   outline: none;
 }
 
+.cdx-alert__meta {
+  position: absolute;
+  right: 8px;
+  bottom: 2px;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.7;
+  user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .cdx-alert [contentEditable='true'][data-placeholder] {
   &::before {
     position: absolute;
