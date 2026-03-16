@@ -285,6 +285,10 @@ export default class Alert {
 
     messageEl.dataset.placeholder = this.messagePlaceholder;
 
+    if (!this.readOnly) {
+      this._lockMessageNavigationInside(messageEl);
+    }
+
     this.container.appendChild(messageEl);
 
     if (this.showMeta) {
@@ -298,6 +302,68 @@ export default class Alert {
     }
 
     return this.container;
+  }
+
+  /**
+   * Prevent navigation keys and boundary Backspace from bubbling up to Editor.js,
+   * which can interpret them as block-level actions.
+   *
+   * @param {HTMLElement} messageEl
+   * @private
+   */
+  _lockMessageNavigationInside(messageEl) {
+    const lockedKeys = new Set([
+      'ArrowLeft',
+      'ArrowRight',
+      'ArrowUp',
+      'ArrowDown',
+      'Home',
+      'End',
+      'PageUp',
+      'PageDown',
+    ]);
+
+    messageEl.addEventListener(
+      'keydown',
+      (event) => {
+        if (lockedKeys.has(event.key)) {
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          return;
+        }
+
+        if (event.key === 'Backspace' && this._isCaretAtStart(messageEl)) {
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        }
+      },
+      true
+    );
+  }
+
+  /**
+   * @param {HTMLElement} root
+   * @returns {boolean}
+   * @private
+   */
+  _isCaretAtStart(root) {
+    const selection = window.getSelection && window.getSelection();
+    if (!selection || selection.rangeCount === 0) return false;
+
+    const range = selection.getRangeAt(0);
+    if (!range.collapsed) return false;
+    if (!root.contains(range.startContainer)) return false;
+
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(root);
+
+    try {
+      preCaretRange.setEnd(range.startContainer, range.startOffset);
+    } catch (_) {
+      return false;
+    }
+
+    return preCaretRange.toString() === '';
   }
 
   /**
